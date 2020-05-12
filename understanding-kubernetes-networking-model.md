@@ -122,7 +122,7 @@ flannel只有一张网卡 这一点比较优雅 本地通信直接使用原生�
 
 这时候外部的包也封好了 这里又搞定了数据包应该发到哪台宿主机上的问题
 
-数据包封装好以后 先经过iptables链 再到达目标机器的eth0 通过拆包根据vni值转发到flannel设备 对比Mac地址相等以后 转发到本地的flannel.1 又进而通过cni0/docker0转发到目标容器的veth
+数据包封装好以后 先经过iptables链 再到达目标机器的eth0 通过拆包根据vni值转发到flannel设备 对比Mac地址相等以后 转发到本地的flannel.1 又进而通过cni0/docker0转发到目标容器的veth 
 
 ![](https://github.com/yuswift/learning-notes/raw/master/images/flannel-vxlan)
 
@@ -136,11 +136,13 @@ Calico和Flannel一样，每个节点分配一个子网，只不过Flannel默认
 
 按理说同一主机的容器之间会像之前一样 处于同一个子网 而Mac地址一样如何通信呢？仔细看容器配置的IP掩码居然是32位的，那也就是说跟谁都不在一个子网了，也就不存在二层的链路层直接通信了。所以说calico是一个纯三层通信的cni~
 
-宿主机路由同flannel的host-gw差不多 下一跳直接指向hostip 不一样的是到达宿主机后，Flannel会通过路由转发流量到bridge设备中，再由bridge转发给容器，而Calico则为每个容器的IP生成一条明细路由，直接指向容器的网卡对端。因此如果容器数量很多的话，主机路由规则数量也会越来越多，因此才有了路由反射
+宿主机路由同flannel的host-gw差不多 下一跳直接指向hostip 不一样的是到达宿主机后，Flannel会通过路由转发流量到bridge设备中，再由bridge转发给容器，而Calico则为每个容器的IP生成一条明细路由(bgp广播)，直接指向容器的网卡对端。因此如果容器数量很多的话，主机路由规则数量也会越来越多，因此才有了路由反射
+
+`RR模式` 中会指定一个或多个BGP Speaker为RouterReflection，它与网络中其他Speaker建立连接，每个Speaker只要与Router Reflection建立BGP就可以获得全网的路由信息。在calico中可以通过`Global Peer`实现RR模式。
 
 calico通过iptables+ipset实现多个网络的隔离 而flannel则通过vni
 
-如果要支持跨网段通信(即不在一个子网 因为calico默认都在一个子网的 flannel的host-gw则不支持)则会通过ipip隧道去传输
+如果要支持跨网段通信(即不在一个子网 因为calico默认都在一个子网的 flannel的host-gw则不支持)则会通过ipip隧道去传输 ipip的header更小，所以性能比flannel vxlan要好一点点
 
 https://mp.weixin.qq.com/s/-L_2qPpFmc85lMmVUi_UCQ
 
@@ -153,6 +155,12 @@ https://xuxinkun.github.io/2019/06/05/flannel-vxlan/
 https://cizixs.com/2017/09/25/vxlan-protocol-introduction/
 
 https://juejin.im/post/5da92ea55188253a8f7c495a
+
+https://mp.weixin.qq.com/s/rhR1bfVrB4PnSZX1BTFNDg
+
+##### 总结
+
+calico的bgp和flannel的host-gw都要求在同一个子网下面 有交换机连接 
 
 #### 为什么需要NAT
 
