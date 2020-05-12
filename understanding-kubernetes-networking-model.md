@@ -24,7 +24,7 @@ docker0是一个很大的网桥 上面连接了很多组veth
 
 与南北不同的是 docker0这个网桥直接在一对veth之间转发数据即可 所以这时候docker0充当了二层虚拟交换机的角色
 
-![](https://upload-images.jianshu.io/upload_images/1493507-cb700ef05d387a4e.png)
+![](https://github.com/yuswift/learning-notes/raw/master/images/docker0.png)
 
 https://mp.weixin.qq.com/s/nDzJQq8nysywicctr7EAhw
 
@@ -50,7 +50,7 @@ https://zhonghua.io/2018/11/13/container-network/
 
 ##### docker的overlay
 
-![](https://mmbiz.qpic.cn/mmbiz_png/mcvxib0WWHRpddiaUVY1dohd5S5P8rMHPaZbvohJh4ExniaTkJp0Vz8YS4UJiagxa8vz6Qoe151lZx6hrbMhbl6NWQ/640)
+![](https://github.com/yuswift/learning-notes/raw/master/images/docker-overlay.jpeg)
 
 一个container两张虚拟网卡 eth0负责东西流量 eth1负责南北 其实eth1就是bridge模式下的docker0
 
@@ -66,7 +66,7 @@ https://mp.weixin.qq.com/s/-L_2qPpFmc85lMmVUi_UCQ
 
 与docker的overlay类似
 
-![](https://mmbiz.qpic.cn/mmbiz_png/mcvxib0WWHRpddiaUVY1dohd5S5P8rMHPaav7GibTcWNib7VLDiaCrqTb4UrqLqh1SCBPxqGx74It9klXyKTlcobDQw/640)
+![](https://github.com/yuswift/learning-notes/raw/master/images/weave.png)
 
 ##### flannel的host-gw
 
@@ -88,7 +88,7 @@ https://mp.weixin.qq.com/s/-L_2qPpFmc85lMmVUi_UCQ
 
 一个 vxlan 报文需要确定两个地址信息：目的虚拟机的 MAC 地址和目的 vtep 的 IP 地址
 
-![](https://ying-zhang.github.io/img/vnet-vxlan.png)
+![](https://github.com/yuswift/learning-notes/raw/master/images/vxlan.png)
 
 ##### flannel的vxlan
 
@@ -124,7 +124,7 @@ flannel只有一张网卡 这一点比较优雅 本地通信直接使用原生�
 
 数据包封装好以后 先经过iptables链 再到达目标机器的eth0 通过拆包根据vni值转发到flannel设备 对比Mac地址相等以后 转发到本地的flannel.1 又进而通过cni0/docker0转发到目标容器的veth
 
-![](https://user-gold-cdn.xitu.io/2019/10/18/16ddcde32185a592?imageView2/0/w/1280/h/960)
+![](https://github.com/yuswift/learning-notes/raw/master/images/flannel-vxlan)
 
 #### calico
 
@@ -176,7 +176,7 @@ https://vflong.github.io/sre/k8s/2020/02/29/understanding-kubernetes-networking-
 
 然后 每个pod都有自己的网络ns与eth0 他们怎么与宿主机沟通呢 就是通过veth0
 
-![](https://sookocheff.com/post/kubernetes/understanding-kubernetes-networking-model/pods-connected-by-bridge.png)
+![](https://github.com/yuswift/learning-notes/raw/master/images/pod-to-pod-same-node.gif)
 
 
 
@@ -186,17 +186,17 @@ Veth0 与veth1之间 通过网桥进行沟通 网桥会判断是否能够转发
 
 Linux 以太网桥是一种虚拟的第 2 层网络设备，用于将两个或多个网段结合在一起，透明地将两个网络连接在一起。该网桥通过维护源和目标之间的转发表实现，而转发表检查通过它的数据包的目的地，并确定是否将是否将数据包传递到连接网桥的其他网段。桥接代码通过查看网络中每个以太网设备唯一的 MAC 地址来决定桥接数据还是丢弃数据。
 
-![](https://sookocheff.com/post/kubernetes/understanding-kubernetes-networking-model/pod-to-pod-same-node.gif)
+![](https://github.com/yuswift/learning-notes/raw/master/images/pod-to-pod-same-node.gif)
 
 #### 跨节点的pod之间的通信
 
-![](https://sookocheff.com/post/kubernetes/understanding-kubernetes-networking-model/pod-to-pod-different-nodes.gif)
+![](https://github.com/yuswift/learning-notes/raw/master/images/pod-to-pod-different-nodes.gif)
 
 至于如何正确地把pod ip正确路由到正确的节点 这就是由不同的cni插件实现的了 
 
 #### pod to service之间的通信
 
-![](https://sookocheff.com/post/kubernetes/understanding-kubernetes-networking-model/pod-to-service.gif)
+![](https://github.com/yuswift/learning-notes/raw/master/images/pod-to-service.gif)
 
 ##### 这里会有一次DNAT的转换
 
@@ -206,7 +206,7 @@ Linux 以太网桥是一种虚拟的第 2 层网络设备，用于将两个或�
 
 
 
-![](https://sookocheff.com/post/kubernetes/understanding-kubernetes-networking-model/service-to-pod.gif)
+![](https://github.com/yuswift/learning-notes/raw/master/images/service-to-pod.gif)
 
 ##### 这里有一次SNAT的转换
 
@@ -216,7 +216,7 @@ Linux 以太网桥是一种虚拟的第 2 层网络设备，用于将两个或�
 
 #### pod如何访问外网
 
-![](https://sookocheff.com/post/kubernetes/understanding-kubernetes-networking-model/pod-to-internet.gif)
+![](https://github.com/yuswift/learning-notes/raw/master/images/pod-to-internet.gif)
 
 网桥发现网段不匹配 则会通过宿主机的iptables 这是否会有一次SNAT 因为网关只认识节点的ip  到了网关以后 又会有一次SNAT 把它转换成公网ip
 
