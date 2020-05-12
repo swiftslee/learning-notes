@@ -1,0 +1,1 @@
+![](https://github.com/yuswift/learning-notes/raw/master/images/kubernetes-troubleshooting.png)
