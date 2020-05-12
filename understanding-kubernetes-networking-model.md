@@ -2,21 +2,27 @@
 
 ##### bridge方案
 
-同一网段内发送数据是不需要经过网关的，而不同网段之间发送数据必需经过网关
+同一网段内发送数据是不需要经过网关(路由器)的，而不同网段之间发送数据必需经过网关(路由器)
 
-假如起了一个container 通过ifconfig会看到有一个docker0 虚拟网卡
+###### 容器的南北流量(访问外网)
+
+假如起了一个container 在宿主机通过ifconfig会看到有一个docker0 虚拟网卡
 
 宿主机通过route命令可以看到所有到172网段的路由都交给了docker0 并且docker0  把veth连了起来
 
 docker0是一个很大的网桥 上面连接了很多组veth
 
-容器内部 通过route命令发现docker0的ip是默认网关 相当于所有的流量先走docker0 然后再由docker0交给eth0 去访问外网
+容器内部 通过route命令发现docker0的ip是默认网关(0.0.0.0的destination都交给了docker0的ip) 相当于所有的流量先走docker0 然后再由docker0交给eth0 去访问外网
 
 因此 数据包的流程是从容器的eth0->veth0->docker0网桥->host eth0 最后在iptables这里 会有一次snat
 
 就是把从eth0接口出去的流量中源地址是172.17的做SNAT源地址转换 这样一来，从Docker容器访问外网的流量，在外部看来就是从宿主机上发出的，外部感觉不到Docker容器的存在
 
 同样的 外部想要通过 hostport访问容器的端口 都会经过一次 dnat 把ip地址转换成172.
+
+###### 东西流量( 容器之间)
+
+与南北不同的是 docker0这个网桥直接在一对veth之间转发数据即可 所以这时候docker0充当了二层虚拟交换机的角色
 
 ![](https://upload-images.jianshu.io/upload_images/1493507-cb700ef05d387a4e.png)
 
@@ -28,29 +34,19 @@ https://www.jianshu.com/p/464774e6e5c5
 
 https://zhonghua.io/2018/11/13/container-network/
 
-##### vxlan
-
-传统的交换网络解决了二层的互通及隔离问题，这个架构发展了几十年已经相当成熟。而随着云时代的到来，却渐渐暴露出了无法支持多租户之间隔离的缺点。
-
-只要是三层可达（能够通过 IP 互相通信）的网络就能部署 vxlan
-
-工作在ip层 通过把MAC地址封装到OSI模型的第3层中(mac in udp)，从而让处于不同网络的主机看起来像在同一个局域网，使用着相同的广播域一样，形成一个大局域网环境 vni=24 bit解决了vlan12bit太少的问题
-
- vxlan 协议比原始报文多 50 字节的内容，这会降低网络链路传输有效数据的比例
-
-一个 vxlan 报文需要确定两个地址信息：目的虚拟机的 MAC 地址和目的 vtep 的 IP 地址
-
-![](https://ying-zhang.github.io/img/vnet-vxlan.png)
+##### container/host/none模式比较简单 跳过
 
 #### 容器跨节点访问的解决思路
 
-由于每个pod或者container都有独立的ip 由于是容器自己配置的ip underlay平面的底层网络设备如交换机、路由器等完全不感知这些IP的存在，也就导致容器的IP不能直接路由出去实现跨主机通信
+由于每个pod或者container都有独立的ip 由于是容器自己配置的ip underlay平面的底层网络设备如交换机、路由器等完全不感知这些IP的存在，也就导致容器的IP不能直接路由出去实现跨主机通信 需要解决如下问题
 
-所以
+- 所有 Pod 都可以与所有其他 Pod 通信，而无需使用网络地址转换（NAT）。
+- 所有节点都可以在没有 NAT 的情况下与所有 Pod 通信。
+- Pod 所看到的自己的 IP 与其他 Pod 或节点看到的相同。
 
-要么修改底层网络设备 加入容器IP地址的管理 
+1.要么修改底层网络设备 加入容器IP地址的管理 
 
-或者复用underlay平面网络  overlay隧道传输(多了封包拆包的过程 flannel 的vxlan或者weave)和修改主机路由
+2.复用underlay平面网络  overlay隧道传输(多了封包拆包的过程 flannel 的vxlan或者weave)和修改主机路由(flannel的host-gw和calico)
 
 ##### docker的overlay
 
@@ -80,6 +76,20 @@ https://mp.weixin.qq.com/s/-L_2qPpFmc85lMmVUi_UCQ
 
 而udp类型backend的基本思想是：既然主机之间是可以相互通信的（并不要求主机在一个子网中），那么我们为什么不能将容器的网络封包作为负载数据在集群的主机之间进行传输呢？这就是所谓的overlay。使用设备flannel.0进行封包解包，不是内核原生支持，上下文切换较大，性能非常差 目前已被弃用x
 
+#### vxlan
+
+传统的交换网络解决了二层的互通及隔离问题，这个架构发展了几十年已经相当成熟。而随着云时代的到来，却渐渐暴露出了无法支持多租户之间隔离的缺点。
+
+只要是三层可达（能够通过 IP 互相通信）的网络就能部署 vxlan
+
+工作在ip层 通过把MAC地址封装到OSI模型的第3层中(mac in udp)，从而让处于不同网络的主机看起来像在同一个局域网，使用着相同的广播域一样，形成一个大局域网环境 vni=24 bit解决了vlan12bit太少的问题
+
+ vxlan 协议比原始报文多 50 字节的内容，这会降低网络链路传输有效数据的比例
+
+一个 vxlan 报文需要确定两个地址信息：目的虚拟机的 MAC 地址和目的 vtep 的 IP 地址
+
+![](https://ying-zhang.github.io/img/vnet-vxlan.png)
+
 ##### flannel的vxlan
 
 核心:路由信息+arp+fdb
@@ -98,15 +108,25 @@ flannel只有一张网卡 这一点比较优雅 本地通信直接使用原生�
 
 同样本地路由这里只有ip要想获取 mac(实际上这个mac就是目标宿主机的flannel.1的mac地址)都要从arp表里获取 这里也是像docker的overlay一样采用了自代理的模式 这里搞定了目标ip 要给哪一张虚拟网卡转发的问题 为什么需要Mac地址呢 个人理解是当转发到另一台宿主机以后 宿主机与flannel.1位于同一个局域网 他们是通过Mac地址进行通信的 
 
-获取到Mac地址以后 vxlan负载部分的已经封包完成 目标Mac地址对应的宿主机的ip又可以从fdb表去获取 这时候外部的包也封好了 这里又搞定了数据包应该发到哪台宿主机上的问题
+获取到Mac地址以后 vxlan负载部分的已经封包完成
 
-数据包封装好以后 先经过iptables链 再到达目标机器的eth0 通过拆包对比Mac地址相等以后 转发到本地的flannel.1 又进而通过cni0/docker0转发到目标容器的veth
+ `[目的MAC:node2.flannel.1.MAC, 目的IP:container2.IP, ...]`
+
+然后增加VXLAN Header
+
+ `[VxlanHeader:VNI:1 [目的MAC:node2.flannel.1.MAC, 目的IP:container2.IP, ...]]`
+
+ 目标Mac地址对应的宿主机的ip又可以从fdb表去获取 
+
+生成外UDP包: `[目的MAC:node2.MAC, 目的IP:node2.IP [VxlanHeader:VNI:1 [目的MAC:node2.flannel.1.MAC, 目的IP:container2.IP, ...]]]`
+
+这时候外部的包也封好了 这里又搞定了数据包应该发到哪台宿主机上的问题
+
+数据包封装好以后 先经过iptables链 再到达目标机器的eth0 通过拆包根据vni值转发到flannel设备 对比Mac地址相等以后 转发到本地的flannel.1 又进而通过cni0/docker0转发到目标容器的veth
 
 ![](https://user-gold-cdn.xitu.io/2019/10/18/16ddcde32185a592?imageView2/0/w/1280/h/960)
 
 #### calico
-
-Calico和Flannel host-gw类似都是通过路由实现跨主机通信,区别在于Flannel通过flanneld进程逐一添加主机静态路由实现，而Calico则是通过BGP实现节点间路由规则的相互学习广播。
 
 Calico和Flannel一样，每个节点分配一个子网，只不过Flannel默认分24位子网，而Calico分的是26位子网。
 
@@ -122,6 +142,18 @@ calico通过iptables+ipset实现多个网络的隔离 而flannel则通过vni
 
 如果要支持跨网段通信(即不在一个子网 因为calico默认都在一个子网的 flannel的host-gw则不支持)则会通过ipip隧道去传输
 
+https://mp.weixin.qq.com/s/-L_2qPpFmc85lMmVUi_UCQ
+
+https://zhonghua.io/2018/11/13/container-network/
+
+##### https://www.cnblogs.com/YaoDD/p/7681811.html
+
+https://xuxinkun.github.io/2019/06/05/flannel-vxlan/
+
+https://cizixs.com/2017/09/25/vxlan-protocol-introduction/
+
+https://juejin.im/post/5da92ea55188253a8f7c495a
+
 #### 为什么需要NAT
 
 个人理解是为了弥补ipv4公网地址不足的问题 多个私有ip在对外访问时 可以通过统一的公网ip对外
@@ -133,6 +165,10 @@ NAT的本质就是让一群机器公用同一个IP
 - **静态NAT：**静态NAT就是一对一映射，内部有多少私有地址需要和外部通信，就要配置多少外网IP地址与其对应
 - **动态NAT：**动态NAT是在路由器上配置一个外网IP地址池，当内部有计算机需要和外部通信时，就从地址池里动态的取出一个外网IP，并将他们的对应关系绑定到NAT表中，通信结束后，这个外网IP才被释放，可供其他内部IP地址转换使用，这个DHCP租约IP有相似之处。
 - **PAT(port address Translation，端口地址转换，也叫端口地址复用)：**这是最常用的NAT技术，也是IPv4能够维持到今天的最重要的原因之一，它提供了一种多对一的方式，对多个内网IP地址，边界路由可以给他们分配一个外网IP，利用这个外网IP的不同端口和外部进行通信。
+
+https://sookocheff.com/post/kubernetes/understanding-kubernetes-networking-model/
+
+https://vflong.github.io/sre/k8s/2020/02/29/understanding-kubernetes-networking-model.html
 
 #### 同一个节点的pod 之间通信
 
